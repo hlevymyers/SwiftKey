@@ -1,0 +1,90 @@
+
+library(NLP)
+library(dplyr)
+library(readtext)
+library(qdap)
+library(tm)
+library(stringi)
+library(stringr)
+library(lattice)
+library(ggplot2)
+library(ddalpha)
+library(caret)
+library(LaF)
+library(tidytext)
+
+#read in data sets
+setwd("C:/Users/hlevy/Documents/R/SwiftKey/final")
+blogsText <-readtext("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.blogs.txt")
+newsText <- readtext("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.news.txt")
+twitterText <- readtext("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.twitter.txt")
+
+#create a small training data set for blogs, news, and twitter
+set.seed(123)
+determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.blogs.txt")
+exploreBlogsText <- sample_lines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.blogs.txt", 2000)
+exploreBlogsText <- VCorpus(VectorSource(exploreBlogsText))
+set.seed(234)
+determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.news.txt")
+exploreNewsText <- sample_lines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.news.txt", 2000)
+exploreNewsText <- VCorpus(VectorSource(exploreNewsText))
+set.seed(345)
+determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.twitter.txt")
+exploreTwitterText <- sample_lines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.twitter.txt", 2000)
+exploreTwitterText <- VCorpus(VectorSource(exploreTwitterText))
+
+#cleaning data
+exploreBlogsText <- tm_map(exploreBlogsText, removePunctuation)
+exploreBlogsText <- tm_map(exploreBlogsText, removeNumbers)
+exploreBlogsText <- tm_map(exploreBlogsText, stripWhitespace)
+exploreBlogsText <- tm_map(exploreBlogsText, removeWords, stopwords("english"))
+exploreBlogsText <- tolower(exploreBlogsText)
+
+dtmBlogs <- as.DocumentTermMatrix(exploreBlogsText, weighting = weightTf)
+dtmBlogs
+                                                                                                
+findFreqTerms(dtmBlogs)
+
+#clean up data to only have words 
+exploreBlogsText <- as.character(as.data.frame(exploreBlogsText))
+exploreBlogsText <- removePunctuation(exploreBlogsText, preserve_intra_word_contractions = TRUE,
+                                      preserve_intra_word_dashes = TRUE)
+exploreBlogsText <- removeNumbers(exploreBlogsText)
+exploreBlogsText <- tolower(exploreBlogsText)
+exploreBlogsText <- removeWords(exploreBlogsText, stopwords("english")) #removes common words like: and, the, a
+for (j in seq(exploreBlogsText)) {
+        exploreBlogsText[[j]] <- gsub("\"", " ", exploreBlogsText[[j]])
+}
+exploreBlogsText <- stripWhitespace(exploreBlogsText)
+exploreBlogsText <- as.r(exploreBlogsText)
+exploreBlogsText <- as.VCorpus(exploreBlogsText)
+
+exploreBlogsText <- tm_map(exploreBlogsText, DocumentTermMatrix)
+
+wordDist <- unique(exploreBlogsText)
+freq <- as.matrix(wordDist)
+
+stri_stats_latex(exploreBlogsText)
+
+
+#exploratory data for Quiz 1
+love <- "love"
+str_count(twitterText, love)
+hate <- "hate"
+str_count(twitterText, hate)
+q3b <- max(str_length(blogsText))
+q3b
+q3n <- max(str_length(newsText))
+q3n
+text3 <- head(blogsText)
+text3
+text3a <- max(str_length(text3))
+text3a
+text4 <- head(newsText)
+text4
+text4a <- max(str_length(text4))
+text4a
+nrow(twitterText)
+nrow(newsText)
+nrow(blogsText)
+
