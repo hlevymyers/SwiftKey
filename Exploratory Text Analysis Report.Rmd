@@ -1,0 +1,193 @@
+---
+title: "Exploratory Analysis of Three Text Data Sets"
+author: "Helen Levy-Myers"
+date: "June 12, 2018"
+output: html_document
+---
+
+## Background
+
+This report represents the initial, exploratory analysis of three text data sets, one from blogs, another from news reports and a third from Twitter posts. All three data sets are a compilation of many authors, rather than from a single individual. Individuals tend to have patterns in writing unique to the individual based on where they lived, language, education, etc. Written text from many different individuals would not have these individual patterns. Text is considered the most unstructured data as words can be combined in an almost infinite number of ways and even single words can have multiple meanings. For example, "present" can mean a gift, a moment of time (now), a grammar structure (present tense), a particular place (present at the table). 
+
+For this analysis, the data sets were not combined. Each data set was quite large; therefore, a smaller training set of 2000 lines per data set was randomly chosen. The data was also "cleaned up" which involved eliminating punctuation, capital letters, numbers, foreign characters, blank lines and stop words, words which are very common words and add little value, such as "the", "and", "a", etc. Some basic metrics about the three data sets below includes, the number of lines and words. 
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE, results='markup', suppressMessages = TRUE, suppressWarning = TRUE, quietly = TRUE, warn.conflicts = FALSE}
+library(NLP)
+library(dplyr)
+library(readtext)
+library(tm)
+library(stringi)
+library(stringr)
+library(lattice)
+library(ggplot2)
+library(ddalpha)
+library(caret)
+library(LaF)
+library(tidytext)
+library(tidyr)
+library(ff)
+library(stopwords)
+library(knitr)
+library(cowplot)
+library(kableExtra)
+
+#read in data sets
+setwd("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US")
+blogLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.blogs.txt")
+blogs2Text <- read.table("en_US.blogs.txt", fill = TRUE, nrows = 899288, sep = "")
+newsLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.news.txt")
+news2Text <- read.table("en_US.news.txt", fill = TRUE, nrows = 1010242, sep = "")
+twitterLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.twitter.txt")
+twitter2Text <- read.table("en_US.twitter.Rdata", fill = TRUE, nrows = 2360148, sep = "", header=F,encoding="latin1", quote="", comment='')
+
+#create exploratory, tokenized data sets
+set.seed(123)
+exploreBlogs2Text <- sample_n(blogs2Text, 2000, replace = FALSE)
+exploreBlogs2Text <- as_tibble(gather(exploreBlogs2Text, key = "rowNumber", value = "text"))
+set.seed(234)
+exploreNews2Text <- sample_n(news2Text, 2000, replace = FALSE)
+exploreNews2Text <- as_tibble(gather(exploreNews2Text, key = "rowNumber", value = "text"))
+set.seed(345)
+exploreTwitter2Text <- sample_n(twitter2Text, 2000, replace = FALSE)
+exploreTwitter2Text <- as_tibble(gather(exploreTwitter2Text, key = "rowNumber", value = "text"))
+
+#clean up data, all lower case, eliminate numbers, foreign characters, punctuation, eliminate stopwords
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::mutate(text = tolower(text))
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::filter(!is.na(text))
+exploreBlogs2Text <- anti_join(exploreBlogs2Text, stop_words, by = c("text" = "word"))
+
+exploreNews2Text <- exploreNews2Text %>% dplyr::mutate(text = tolower(text))
+exploreNews2Text <- exploreNews2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreNews2Text <- exploreNews2Text %>% dplyr::filter(!is.na(text))
+exploreNews2Text <- anti_join(exploreNews2Text, stop_words, by = c("text" = "word"))
+
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::mutate(text = tolower(text))
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::filter(!is.na(text))
+exploreTwitter2Text <- anti_join(exploreTwitter2Text, stop_words, by = c("text" = "word"))
+```
+##Count Unique Words and Rank Them
+
+The question above is asking how many unique words are in the data set. Unique words make for interesting reading, but are more complicated to predict. One long term goal of this project is to be able to predict the next word, knowing the first two or three. Knowing how many unique words would be useful for developing a prediction algorithm. The three tables below represent unique words from blogs, news reports and Twitter tweets in order. 
+
+```{r, echo = FALSE}
+exploreBlogsCount1 <- exploreBlogs2Text %>% count(text, sort = TRUE)
+exploreNewsCount1 <- exploreNews2Text %>% count(text, sort = TRUE)
+exploreTwitterCount1 <- exploreTwitter2Text %>% count(text, sort = TRUE)
+```
+
+```{r, echo=FALSE}
+kable(exploreBlogsCount1[1:10, ]) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>% add_header_above(c("Blogs", "Count"))
+kable(exploreNewsCount1[1:10, ]) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>% add_header_above(c("News", "Count"))
+kable(exploreTwitterCount1[1:10, ]) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>% add_header_above(c("Twitter", "Count"))
+```
+        
+## Does this data set have a long or short tail?
+A long tail would mean that a sizable portion of the data set are unique words. How would you predict a word which only shows up once in 2000 lines? As part of the cleaning process, stop words (very common words like "the", "and", "an") were removed. With very long tail data, one may reexamine eliminating stopwords as it possible that including them would improve the algorithm. 
+
+```{r, echo=FALSE}
+exploreBlogsCount2 <- exploreBlogsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+exploreNewsCount2 <- exploreNewsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+exploreTwitterCount2 <- exploreTwitterCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+exploreBlogsCount3 <- exploreBlogsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+exploreNewsCount3 <- exploreNewsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+exploreTwitterCount3 <- exploreTwitterCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+```
+
+## Long Tail - 90% of the data set are these number of words 
+
+```{r, echo=FALSE}
+kable(min(which(exploreBlogsCount2$cumpercent > .90))) %>% add_header_above(c("Blogs - 90% of Words"))
+kable(min(which(exploreNewsCount2$cumpercent > .90))) %>% add_header_above(c("News - 90% of Words"))
+kable(min(which(exploreTwitterCount2$cumpercent > .90))) %>% add_header_above(c("Twitter - 90% of Words"))
+```
+## Short Tail - 50% of the data set are these number of words
+```{r, echo=FALSE}
+kable(min(which(exploreBlogsCount3$cumpercent > .50))) %>% add_header_above(c("Blogs - 50% of Words"))
+kable(min(which(exploreNewsCount3$cumpercent > .50))) %>% add_header_above(c("News - 50% of Words"))
+kable(min(which(exploreTwitterCount3$cumpercent > .50))) %>% add_header_above(c("Twitter - 50% of Words"))
+```
+
+##Exploratory Sentiment Analysis
+
+One interesting way to look at text is to try to understand what the text is trying to convey, is it positive or negative? The Bing lexicon does that. How positive or negative? Afinn ranks words from 5 (most positive) to -5 (most negative). Does it have big themes like, joy, fear, etc.? The NRC lexicon also then categorizes the sentiments into positive and negative too. In an effort to get a sense of these three data sets, positive and negative words were looked at. For these three histograms, the NRC lexicon was used. 
+```{r, echo=FALSE, results="hide", suppressMessages = TRUE, quietly = TRUE, include=FALSE, message=FALSE, warning=FALSE}
+sentiments
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+
+#positive and negative words
+get_sentiments("afinn") %>% count(score)
+blog_word_counts <-  exploreBlogs2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+                        filter(sentiment %in% c("positive", "negative")) %>%
+                        mutate(method = "NRC") %>%
+                        count(text, sentiment, sort = TRUE) %>%
+                        ungroup()
+
+blogplot <- blog_word_counts %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 Blog Words") +
+        coord_flip()
+
+news_word_counts <- exploreNews2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+        filter(sentiment %in% c("positive", "negative")) %>%
+        mutate(method = "NRC") %>%
+        count(text, sentiment, sort = TRUE) %>%
+        ungroup()
+
+newsplot <- news_word_counts %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 News Words") +
+        coord_flip()
+
+twitter_word_counts <-  exploreTwitter2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+        filter(sentiment %in% c("positive", "negative")) %>%
+        mutate(method = "NRC") %>%
+        count(text, sentiment, sort = TRUE) %>%
+        ungroup()
+
+twitterplot <- twitter_word_counts %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 Twitter Words") +
+        coord_flip()
+```
+
+```{r, fig.height = 10, echo=FALSE}
+plot_grid(blogplot, newsplot, twitterplot, align = 'v', ncol = 1)
+```
+
+## Next Steps
+The goal of this project is to predict the next word, knowing the two previous words. Instead of looking at individual words, the next step is to look at small units of words, two or three words, building n-grams. As part of that process, several new packages will be used including widyr, ggraph, and document-term-matrices.
+
+
