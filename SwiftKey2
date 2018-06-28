@@ -1,0 +1,194 @@
+
+library(NLP)
+library(dplyr)
+library(readtext)
+library(qdap)
+library(tm)
+library(stringi)
+library(stringr)
+library(lattice)
+library(ggplot2)
+library(ddalpha)
+library(caret)
+library(LaF)
+library(tidytext)
+library(tidyr)
+library(ff)
+library(stopwords)
+library(knitr)
+library(cowplot)
+library(kableExtra)
+
+#read in data sets
+setwd("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US")
+blogLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.blogs.txt")
+blogs2Text <- read.table("en_US.blogs.txt", fill = TRUE, nrows = 899288, sep = "")
+newsLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.news.txt")
+news2Text <- read.table("en_US.news.txt", fill = TRUE, nrows = 1010242, sep = "")
+twitterLines <- determine_nlines("C:/Users/hlevy/Documents/R/SwiftKey/final/en_US/en_US.twitter.txt")
+twitter2Text <- read.table("en_US.twitter.Rdata", fill = TRUE, nrows = 2360148, sep = "", header=F,encoding="latin1", quote="", comment='')
+
+#create exploratory, tokenized data sets
+set.seed(123)
+exploreBlogs2Text <- sample_n(blogs2Text, 2000, replace = FALSE)
+exploreBlogs2Text <- as_tibble(gather(exploreBlogs2Text, key = "rowNumber", value = "text"))
+str(exploreBlogs2Text)
+head(exploreBlogs2Text)
+set.seed(234)
+exploreNews2Text <- sample_n(news2Text, 2000, replace = FALSE)
+exploreNews2Text <- as_tibble(gather(exploreNews2Text, key = "rowNumber", value = "text"))
+set.seed(345)
+exploreTwitter2Text <- sample_n(twitter2Text, 2000, replace = FALSE)
+exploreTwitter2Text <- as_tibble(gather(exploreNews2Text, key = "rowNumber", value = "text"))
+
+#clean up data, all lower case, eliminate numbers, foreign characters, punctuation, eliminate stopwords
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::mutate(text = tolower(text))
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreBlogs2Text <- exploreBlogs2Text %>% dplyr::filter(!is.na(text))
+exploreBlogs2Text <- anti_join(exploreBlogs2Text, stop_words, by = c("text" = "word"))
+
+exploreNews2Text <- exploreNews2Text %>% dplyr::mutate(text = tolower(text))
+exploreNews2Text <- exploreNews2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreNews2Text <- exploreNews2Text %>% dplyr::filter(!is.na(text))
+exploreNews2Text <- anti_join(exploreNews2Text, stop_words, by = c("text" = "word"))
+
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::mutate(text = tolower(text))
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::mutate(text = str_extract(text, "[a-z']+"))
+exploreTwitter2Text <- exploreTwitter2Text %>% dplyr::filter(!is.na(text))
+exploreTwitter2Text <- anti_join(exploreTwitter2Text, stop_words, by = c("text" = "word"))
+
+#count unique words and rank them
+exploreBlogsCount1 <- exploreBlogs2Text %>% count(text, sort = TRUE)
+exploreNewsCount1 <- exploreNews2Text %>% count(text, sort = TRUE)
+exploreTwitterCount1 <- exploreTwitter2Text %>% count(text, sort = TRUE)
+
+uniqueWords <- table(exploreBlogsCount1, exploreNewsCount1, exploreTwitterCount1, sort = TRUE)
+rownames(uniqueWords) <- c("Blogs", "News", "Twitter")
+colnames(uniqueWords) <- c("Source", "Count")
+
+kable(uniqueWords) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+
+exploreNewsCount1 <- exploreNews2Text %>% count(text, sort = TRUE)
+kable(exploreNewsCount1[1:10,])
+
+
+kable(exploreTwitterCount1[1:10,])
+        
+# Which index is the smallest above 90%
+exploreBlogsCount2 <- exploreBlogsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreBlogsCount2$cumpercent > .90))
+
+exploreNewsCount2 <- exploreNewsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreNewsCount2$cumpercent > .90))
+
+exploreTwitterCount2 <- exploreTwitterCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreTwitterCount2$cumpercent > .90))
+
+# Which index is the smallest above 50%
+exploreBlogsCount3 <- exploreBlogsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreBlogsCount3$cumpercent > .50))
+
+exploreNewsCount3 <- exploreNewsCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreNewsCount3$cumpercent > .50))
+
+exploreTwitterCount3 <- exploreTwitterCount1 %>% dplyr::mutate(cumpercent = cumsum(n)/sum(n))
+min(which(exploreTwitterCount3$cumpercent > .50))
+
+#make a histogram of top 10 words
+exploreBlogsCount1 %>%
+        mutate(text = reorder(text, n)) %>%
+        dplyr::filter(n > 50) %>%
+        ggplot(aes(text, n)) +
+        geom_col() +
+        xlab(NULL) +
+        coord_flip()
+
+exploreNewsCount1 %>%
+        mutate(text = reorder(text, n)) %>%
+        dplyr::filter(n > 50) %>%
+        ggplot(aes(text, n)) +
+        geom_col() +
+        xlab(NULL) +
+        coord_flip()
+
+exploreTwitterCount1 %>%
+        mutate(text = reorder(text, n)) %>%
+        dplyr::filter(n > 50) %>%
+        ggplot(aes(text, n)) +
+        geom_col() +
+        xlab(NULL) +
+        coord_flip()
+
+#exploratory sentiment analysis
+sentiments
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+nrc_joy
+        
+blogs2sent <- exploreBlogs2Text %>% inner_join(nrc_joy, exploreBlogs2Text, by = c("text" = "word")) %>% count(text, sort = TRUE)
+blogs2sent
+
+#positive and negative words
+get_sentiments("afinn") %>% count(score)
+blog_word_counts <-  exploreBlogs2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+                        filter(sentiment %in% c("positive", "negative")) %>%
+                        mutate(method = "NRC") %>%
+                        count(text, sentiment, sort = TRUE) %>%
+                        ungroup()
+
+blogplot <- blog_word_counts %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 Blog Words") +
+        coord_flip()
+
+news_word_counts <-  exploreNews2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+        filter(sentiment %in% c("positive", "negative")) %>%
+        mutate(method = "NRC") %>%
+        count(text, sentiment, sort = TRUE) %>%
+        ungroup()
+
+newsplot <- news_word_count %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 News Words") +
+        coord_flip()
+
+twitter_word_counts <-  exploreTwitter2Text %>% inner_join(get_sentiments("nrc"), by = c("text" = "word")) %>% 
+        filter(sentiment %in% c("positive", "negative")) %>%
+        mutate(method = "NRC") %>%
+        count(text, sentiment, sort = TRUE) %>%
+        ungroup()
+
+twitterplot <- twitter_word_counts %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(text = reorder(text, n)) %>%
+        ggplot(aes(text, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+             x = NULL,
+             title = "Top 10 Twitter Words") +
+        coord_flip()
+
+plot_grid(blogplot, newsplot, twitterplot, labels = c("Blog Texts", "News Texts", "Twitter Texts"), align = 'v', ncol = 1)
